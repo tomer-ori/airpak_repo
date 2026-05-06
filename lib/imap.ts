@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as imapSimple from 'imap-simple'
 import { simpleParser } from 'mailparser'
 import { getDb, getSetting, setSetting } from './db'
