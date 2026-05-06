@@ -118,7 +118,8 @@ export async function syncViaImap(): Promise<{ added: number; skipped: number; e
     },
   }
 
-  let connection: imapSimple.ImapSimple | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let connection: any = null
 
   try {
     connection = await imapSimple.connect(config)
