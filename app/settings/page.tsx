@@ -44,7 +44,7 @@ export default function SettingsPage() {
   const testConnection = async () => {
     setTesting(true); setTestResult(null)
     const res = await fetch('/api/email/test', { method: 'POST' }).then(r => r.json())
-    if (res.success) setTestResult({ msg: '✓ החיבור הצליח! מייל אישור נשלח אליך', ok: true })
+    if (res.success) setTestResult({ msg: '✓ החיבור הצליח!', ok: true })
     else setTestResult({ msg: res.error ?? 'שגיאה לא ידועה', ok: false })
     setTesting(false)
   }
