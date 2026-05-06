@@ -1,25 +1,20 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import StatsCard from '@/components/StatsCard'
-import { ShoppingCart, TrendingUp, AlertCircle, CheckCircle, RefreshCw, Plus, Mail, Package } from 'lucide-react'
+import { ShoppingCart, AlertCircle, CheckCircle, Mail, Plus } from 'lucide-react'
 import Link from 'next/link'
 
 interface Stats {
-  today: { count: number; revenue: number }
-  week: { count: number; revenue: number }
-  month: { count: number; revenue: number }
+  today: { count: number }
+  week: { count: number }
+  month: { count: number }
   pendingCount: number
   deliveredCount: number
-  avgOrderValue: number
 }
 interface Order {
-  id: number; customer_name: string; order_date: string; amount: number; status: 'pending' | 'delivered'; source: string
+  id: number; customer_name: string; order_date: string; status: 'pending' | 'delivered'; source: string
 }
 interface Alert { id: number; message: string; customer_name: string; order_date: string }
-
-function fmt(n: number) {
-  return new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n)
-}
 
 export default function Dashboard() {
   const [stats, setStats]       = useState<Stats | null>(null)
@@ -43,8 +38,6 @@ export default function Dashboard() {
 
   useEffect(() => { loadAll() }, [loadAll])
 
-  const seedData = async () => { await fetch('/api/seed', { method: 'POST' }); loadAll() }
-
   const syncEmail = async () => {
     setSyncing(true); setSyncMsg('')
     const res = await fetch('/api/email/sync', { method: 'POST' }).then(r => r.json())
@@ -66,7 +59,7 @@ export default function Dashboard() {
     </div>
   )
 
-  const today = new Date().toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const todayStr = new Date().toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
     <div className="page-container">
@@ -78,13 +71,10 @@ export default function Dashboard() {
             <div style={{ width: 4, height: 28, background: 'linear-gradient(180deg, #2d6aff, #5c8cff)', borderRadius: 99 }} />
             <h1 className="page-title">לוח בקרה</h1>
           </div>
-          <p className="page-subtitle" style={{ marginRight: 16 }}>{today}</p>
+          <p className="page-subtitle" style={{ marginRight: 16 }}>{todayStr}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={seedData} className="btn-secondary" style={{ fontSize: 13 }}>
-            <Package size={15} /> נתוני דוגמה
-          </button>
-          <button onClick={syncEmail} disabled={syncing} className="btn-secondary">
+<button onClick={syncEmail} disabled={syncing} className="btn-secondary">
             <Mail size={15} /> {syncing ? 'מסנכרן...' : 'סנכרון מייל'}
           </button>
           <Link href="/orders?new=1" className="btn-primary">
@@ -104,15 +94,15 @@ export default function Dashboard() {
         <StatsCard
           title="הזמנות היום"
           value={stats?.today.count ?? 0}
-          sub={stats?.today.revenue ? `הכנסות: ${fmt(stats.today.revenue)}` : 'אין הכנסות מתועדות'}
+          sub="הזמנות שנכנסו היום"
           icon={<ShoppingCart size={22} />}
           gradient="linear-gradient(135deg, #2d6aff 0%, #5c8cff 100%)"
         />
         <StatsCard
           title="הזמנות השבוע"
           value={stats?.week.count ?? 0}
-          sub={`הכנסות: ${fmt(stats?.week.revenue ?? 0)}`}
-          icon={<TrendingUp size={22} />}
+          sub="7 הימים האחרונים"
+          icon={<ShoppingCart size={22} />}
           gradient="linear-gradient(135deg, #059669 0%, #10b981 100%)"
         />
         <StatsCard
@@ -125,7 +115,7 @@ export default function Dashboard() {
         <StatsCard
           title="סופקו החודש"
           value={stats?.deliveredCount ?? 0}
-          sub={`ממוצע הזמנה: ${fmt(stats?.avgOrderValue ?? 0)}`}
+          sub="הזמנות שסגרנו"
           icon={<CheckCircle size={22} />}
           gradient="linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%)"
         />
@@ -165,7 +155,6 @@ export default function Dashboard() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 14, color: '#0f1f3d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.customer_name}</div>
-                    {o.amount > 0 && <div style={{ fontSize: 12, color: '#6b7a99', marginTop: 2 }}>{fmt(o.amount)}</div>}
                   </div>
                   {o.status === 'pending' ? (
                     <button onClick={() => markDelivered(o.id)} className="btn-success" style={{ flexShrink: 0, fontSize: 12 }}>

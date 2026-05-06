@@ -1,5 +1,5 @@
 // Uses Node.js 22 built-in sqlite (stable since 22.12)
-import { DatabaseSync, StatementSync } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 import path from 'path'
 import fs from 'fs'
 
@@ -54,12 +54,21 @@ function initSchema(db: DatabaseSync) {
     );
   `)
 
+  // מיגרציות
+  try { db.exec(`ALTER TABLE orders ADD COLUMN received_at TEXT`) } catch {}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN attachments TEXT DEFAULT '[]'`) } catch {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blocked_emails (
+      gmail_message_id TEXT PRIMARY KEY,
+      blocked_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
   const defaults: Record<string, string> = {
     alert_days: '4',
-    gmail_client_id: '',
-    gmail_client_secret: '',
-    gmail_refresh_token: '',
-    gmail_email: '',
+    imap_email: '',
+    imap_password: '',
     last_email_sync: '',
   }
 

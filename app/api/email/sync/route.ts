@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
-import { syncEmailOrders } from '@/lib/gmail'
+import { syncViaImap } from '@/lib/imap'
 import { checkAndCreateAlerts } from '@/lib/alertChecker'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST() {
-  const result = await syncEmailOrders()
+  const result = await syncViaImap()
   if (result.added > 0) checkAndCreateAlerts()
   return NextResponse.json(result)
 }

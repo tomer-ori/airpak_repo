@@ -1,17 +1,33 @@
 'use client'
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Plus, Search, Trash2, Check, Mail, User, X, Filter, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Search, Trash2, Check, Mail, User, X, Filter, FileText, ExternalLink } from 'lucide-react'
+
+function renderEmailBody(text: string) {
+  const URL_RE = /(https?:\/\/[^\s\)\]>'"]+)/g
+  const parts = text.split(URL_RE)
+  return parts.map((part, i) => {
+    if (!URL_RE.test(part)) { URL_RE.lastIndex = 0; return part }
+    URL_RE.lastIndex = 0
+    const isPdf = part.toLowerCase().includes('.pdf')
+    return (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+        style={{ color: isPdf ? '#059669' : '#2d6aff', fontWeight: isPdf ? 700 : 400,
+          textDecoration: 'underline', wordBreak: 'break-all', display: 'inline-flex',
+          alignItems: 'center', gap: 3 }}>
+        {isPdf && <FileText size={13} />}{part}{!isPdf && <ExternalLink size={11} />}
+      </a>
+    )
+  })
+}
 
 interface Order {
   id: number; customer_name: string; customer_email: string; order_date: string
-  amount: number; status: 'pending' | 'delivered'; source: string; notes: string; email_subject: string
+  amount: number; status: 'pending' | 'delivered'; source: string; notes: string
+  email_subject: string; email_snippet: string; received_at: string | null
+  attachments: string
 }
 
-function fmt(n: number) {
-  if (!n || n === 0) return '—'
-  return new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n)
-}
 function today() { return new Date().toISOString().slice(0, 10) }
 function weekAgo() { return new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10) }
 
@@ -43,15 +59,22 @@ function OrdersInner() {
 
   useEffect(() => { loadOrders() }, [loadOrders])
 
-  const toggleStatus = async (o: Order) => {
-    await fetch(`/api/orders/${o.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: o.status === 'pending' ? 'delivered' : 'pending' }) })
+  const markDelivered = async (id: number) => {
+    await fetch(`/api/orders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'delivered' }) })
     loadOrders()
   }
+
+  const markPending = async (id: number) => {
+    await fetch(`/api/orders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending' }) })
+    loadOrders()
+  }
+
   const deleteOrder = async (id: number) => {
-    if (!confirm('האם למחוק הזמנה זו?')) return
+    if (!confirm('האם למחוק הזמנה זו לצמיתות?')) return
     await fetch(`/api/orders/${id}`, { method: 'DELETE' })
     loadOrders()
   }
+
   const submitNew = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.customer_name || !form.order_date) return
@@ -62,7 +85,6 @@ function OrdersInner() {
     router.replace('/orders'); loadOrders()
   }
 
-  const totalRevenue = orders.reduce((s, o) => s + (o.amount || 0), 0)
   const pendingCount = orders.filter(o => o.status === 'pending').length
 
   return (
@@ -75,7 +97,7 @@ function OrdersInner() {
             <h1 className="page-title">ניהול הזמנות</h1>
           </div>
           <p className="page-subtitle" style={{ marginRight: 16 }}>
-            {orders.length} הזמנות · <span style={{ color: '#d97706', fontWeight: 600 }}>{pendingCount} ממתינות</span> · {totalRevenue > 0 ? fmt(totalRevenue) : 'ללא סכומים'}
+            {orders.length} הזמנות · <span style={{ color: '#d97706', fontWeight: 600 }}>{pendingCount} ממתינות</span>
           </p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary">
@@ -149,14 +171,13 @@ function OrdersInner() {
 
       {/* Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        {/* Table Header */}
         <div style={{
-          display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr 160px 90px',
+          display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 160px 90px',
           gap: 16, padding: '12px 24px',
           background: '#f8fafc', borderBottom: '1px solid #e8edf5',
           fontSize: 11, fontWeight: 700, color: '#9baabe', textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>
-          <span>לקוח</span><span>תאריך</span><span>סכום</span><span>מקור</span><span>סטטוס</span><span>פעולות</span>
+          <span>לקוח</span><span>תאריך</span><span>מקור</span><span>סטטוס</span><span>פעולות</span>
         </div>
 
         {loading ? (
@@ -176,7 +197,7 @@ function OrdersInner() {
               <div
                 onClick={() => setExpand(expandedId === o.id ? null : o.id)}
                 style={{
-                  display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr 160px 90px',
+                  display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 160px 90px',
                   gap: 16, padding: '16px 24px', cursor: 'pointer',
                   borderBottom: '1px solid #f1f4fb',
                   background: expandedId === o.id ? '#f8fafc' : idx % 2 === 0 ? 'white' : '#fdfeff',
@@ -199,14 +220,16 @@ function OrdersInner() {
                 </div>
 
                 {/* Date */}
-                <span style={{ fontSize: 13, color: '#4a5f80', fontWeight: 500 }}>
-                  {new Date(o.order_date).toLocaleDateString('he-IL')}
-                </span>
-
-                {/* Amount */}
-                <span style={{ fontSize: 14, fontWeight: 700, color: o.amount > 0 ? '#0f1f3d' : '#c9d4e0' }}>
-                  {fmt(o.amount)}
-                </span>
+                <div>
+                  <div style={{ fontSize: 13, color: '#4a5f80', fontWeight: 500 }}>
+                    {new Date(o.order_date).toLocaleDateString('he-IL')}
+                  </div>
+                  {o.received_at && (
+                    <div style={{ fontSize: 11, color: '#9baabe', marginTop: 2 }}>
+                      {new Date(o.received_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' })}
+                    </div>
+                  )}
+                </div>
 
                 {/* Source */}
                 <span>
@@ -225,22 +248,65 @@ function OrdersInner() {
                 {/* Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
                   {o.status === 'pending' ? (
-                    <button onClick={() => toggleStatus(o)} className="btn-success" style={{ fontSize: 12, padding: '6px 12px' }}>✓ סופק</button>
+                    <>
+                      <button onClick={() => markDelivered(o.id)} className="btn-success" style={{ fontSize: 12, padding: '6px 12px' }}>✓ סופק</button>
+                      <button onClick={() => deleteOrder(o.id)} style={{ width: 32, height: 32, borderRadius: 8, background: '#fff5f7', border: '1px solid #fecdd3', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e11d48' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </>
                   ) : (
-                    <button onClick={() => toggleStatus(o)} className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}>בטל</button>
+                    <>
+                      <button onClick={() => markPending(o.id)} className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}>↩ בטל סיפוק</button>
+                      <button onClick={() => deleteOrder(o.id)} style={{ width: 32, height: 32, borderRadius: 8, background: '#fff5f7', border: '1px solid #fecdd3', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e11d48' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </>
                   )}
-                  <button onClick={() => deleteOrder(o.id)} style={{ width: 32, height: 32, borderRadius: 8, background: '#fff5f7', border: '1px solid #fecdd3', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e11d48', transition: 'all 0.15s' }}>
-                    <Trash2 size={14} />
-                  </button>
                 </div>
               </div>
 
               {/* Expanded row */}
               {expandedId === o.id && (
-                <div style={{ padding: '14px 24px 16px 24px', background: '#f0f4ff', borderBottom: '1px solid #e0e9ff', borderRight: '3px solid #2d6aff' }}>
-                  {o.email_subject && <p style={{ fontSize: 13, color: '#3d4f6e', marginBottom: 4 }}><b>נושא מייל:</b> {o.email_subject}</p>}
-                  {o.notes && <p style={{ fontSize: 13, color: '#3d4f6e' }}><b>הערות:</b> {o.notes}</p>}
-                  {!o.email_subject && !o.notes && <p style={{ fontSize: 13, color: '#9baabe' }}>אין פרטים נוספים להצגה</p>}
+                <div style={{ padding: '16px 24px 20px 24px', background: '#f0f4ff', borderBottom: '1px solid #e0e9ff', borderRight: '3px solid #2d6aff', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(() => {
+                    const files: string[] = JSON.parse(o.attachments || '[]')
+                    return files.length > 0 ? (
+                      <div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7a99', textTransform: 'uppercase', letterSpacing: '0.05em' }}>קבצים מצורפים</span>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                          {files.map(f => (
+                            <a key={f} href={`/api/attachments/${f}`} target="_blank" rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#059669', color: 'white', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                              <FileText size={14} /> {f.replace(/^[^_]+_/, '')}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null
+                  })()}
+                  {o.email_subject && (
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7a99', textTransform: 'uppercase', letterSpacing: '0.05em' }}>נושא מייל</span>
+                      <p style={{ fontSize: 13, color: '#1a3060', fontWeight: 600, marginTop: 3 }}>{o.email_subject}</p>
+                    </div>
+                  )}
+                  {o.email_snippet && (
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7a99', textTransform: 'uppercase', letterSpacing: '0.05em' }}>תוכן ההודעה</span>
+                      <div style={{ fontSize: 13, color: '#3d4f6e', marginTop: 3, lineHeight: 1.7, whiteSpace: 'pre-wrap', background: 'white', border: '1px solid #dde5f7', borderRadius: 10, padding: '10px 14px', maxHeight: 400, overflowY: 'auto' }}>
+                        {renderEmailBody(o.email_snippet)}
+                      </div>
+                    </div>
+                  )}
+                  {o.notes && (
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7a99', textTransform: 'uppercase', letterSpacing: '0.05em' }}>הערות</span>
+                      <p style={{ fontSize: 13, color: '#3d4f6e', marginTop: 3 }}>{o.notes}</p>
+                    </div>
+                  )}
+                  {!o.email_subject && !o.email_snippet && !o.notes && (
+                    <p style={{ fontSize: 13, color: '#9baabe' }}>אין פרטים נוספים להצגה</p>
+                  )}
                 </div>
               )}
             </div>

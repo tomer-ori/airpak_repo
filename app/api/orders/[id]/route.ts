@@ -41,8 +41,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const db = getDb()
   const id = parseInt(params.id)
-  const order = db.prepare('SELECT id FROM orders WHERE id = ?').get(id)
+  const order = db.prepare('SELECT id, gmail_message_id FROM orders WHERE id = ?').get(id) as { id: number; gmail_message_id: string | null } | undefined
   if (!order) return NextResponse.json({ error: 'הזמנה לא נמצאה' }, { status: 404 })
+
+  if (order.gmail_message_id) {
+    db.prepare(`INSERT OR IGNORE INTO blocked_emails (gmail_message_id) VALUES (?)`).run(order.gmail_message_id)
+  }
+
   db.prepare('DELETE FROM orders WHERE id = ?').run(id)
   return NextResponse.json({ success: true })
 }

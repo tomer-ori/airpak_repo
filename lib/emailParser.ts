@@ -10,9 +10,27 @@ interface ParsedOrder {
 }
 
 const ORDER_KEYWORDS = [
-  'הזמנה', 'order', 'purchase', 'רכישה', 'הצעת מחיר', 'quote',
-  'אריזה', 'packaging', 'airpak', 'supply', 'אספקה', 'delivery',
-  'פקודה', 'הזמנת', 'מוצר', 'product', 'כמות', 'quantity',
+  // מוצרי אריזה — עברית
+  'שקית', 'שקיות', 'ניילון', 'ניילונים', 'פצפצים', 'פצפץ',
+  'קרטון', 'קרטונים', 'בקבוק', 'בקבוקים', 'אריזה', 'אריזות',
+  'כלי אוכל', 'צלחות', 'כוסות חד פעמי', 'מגשים', 'סכום חד פעמי',
+  'שקית ניילון', 'שקית זיפ', 'שקית בועות', 'טפט בועות',
+  'קופסה', 'קופסאות', 'מעטפה', 'מעטפות', 'גליל', 'גלילים',
+  'סרט הדבקה', 'סרט אריזה', "סטרץ'", 'סטרץ',
+  // מוצרי אריזה — אנגלית
+  'packaging', 'package', 'bags', 'bag', 'nylon', 'bubble wrap',
+  'carton', 'cartons', 'bottle', 'bottles', 'box', 'boxes',
+  'shrink wrap', 'stretch film', 'tape', 'envelope', 'envelopes',
+  'airpak',
+  // הזמנה כללית — עברית (הטיות)
+  'הזמנה', 'הזמנות',          // הזמנה / הזמנות
+  'הזמנת',                     // הזמנת מוצרים, הזמנת לקוח
+  'הזמנתי', 'הזמנתך', 'הזמנתכם', 'הזמנתו', 'הזמנתה', 'הזמנתנו', // ההטיות האישיות
+  'להזמין', 'מזמין', 'מזמינה', 'מזמינים', // פועל
+  'הוזמן', 'הוזמנה',           // סביל
+  'הצעת מחיר', 'כמות', 'מחיר ליחידה',
+  // הזמנה כללית — אנגלית
+  'order', 'orders', 'purchase order', 'order confirmation',
 ]
 
 export function parseEmailOrder(msg: gmail_v1.Schema$Message): ParsedOrder | null {
@@ -60,17 +78,30 @@ function parseDate(dateStr: string): string {
 }
 
 function extractAmount(text: string): number {
-  const patterns = [
-    /₪\s*(\d[\d,]*(?:\.\d{1,2})?)/,
-    /(\d[\d,]*(?:\.\d{1,2})?)\s*(?:ש"ח|שח|ils|nis)/i,
-    /\$\s*(\d[\d,]*(?:\.\d{1,2})?)/,
-    /total[:\s]+(\d[\d,]*(?:\.\d{1,2})?)/i,
+  const totalPatterns = [
     /סה"כ[:\s]*(\d[\d,]*(?:\.\d{1,2})?)/,
-    /סכום[:\s]*(\d[\d,]*(?:\.\d{1,2})?)/,
+    /סה״כ[:\s]*(\d[\d,]*(?:\.\d{1,2})?)/,
+    /סכום סופי[:\s]*(\d[\d,]*(?:\.\d{1,2})?)/,
+    /total[:\s]+(\d[\d,]*(?:\.\d{1,2})?)/i,
+    /grand total[:\s]*(\d[\d,]*(?:\.\d{1,2})?)/i,
   ]
-  for (const p of patterns) {
+  for (const p of totalPatterns) {
     const m = text.match(p)
     if (m) return parseFloat(m[1].replace(/,/g, ''))
   }
-  return 0
+
+  const pricePatterns = [
+    /₪\s*(\d[\d,]*(?:\.\d{1,2})?)/g,
+    /(\d[\d,]*(?:\.\d{1,2})?)\s*(?:ש"ח|ש״ח|שח|ils|nis)(?=\s|$|,)/gi,
+    /\$\s*(\d[\d,]*(?:\.\d{1,2})?)/g,
+  ]
+  const found: number[] = []
+  for (const p of pricePatterns) {
+    for (const m of text.matchAll(p)) {
+      const val = parseFloat(m[1].replace(/,/g, ''))
+      if (val > 0) found.push(val)
+    }
+  }
+  if (found.length === 0) return 0
+  return found.reduce((a, b) => a + b, 0)
 }

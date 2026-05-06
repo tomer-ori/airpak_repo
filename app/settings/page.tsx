@@ -1,116 +1,163 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Save, Mail, Bell, RefreshCw, ExternalLink, Shield, CheckCircle } from 'lucide-react'
+import { Save, Mail, Bell, RefreshCw, CheckCircle, ExternalLink, Shield, Eye, EyeOff, Wifi } from 'lucide-react'
 
 interface SettingsForm {
-  alert_days: string; gmail_client_id: string; gmail_client_secret: string
-  gmail_refresh_token: string; gmail_email: string; last_email_sync: string
+  alert_days: string
+  imap_email: string
+  imap_password: string
+  last_email_sync: string
 }
 
 export default function SettingsPage() {
-  const [form, setForm]       = useState<SettingsForm>({ alert_days: '4', gmail_client_id: '', gmail_client_secret: '', gmail_refresh_token: '', gmail_email: '', last_email_sync: '' })
-  const [saving, setSaving]   = useState(false)
-  const [saved, setSaved]     = useState(false)
-  const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState('')
+  const [form, setForm]           = useState<SettingsForm>({ alert_days: '4', imap_email: '', imap_password: '', last_email_sync: '' })
+  const [saving, setSaving]       = useState(false)
+  const [saved, setSaved]         = useState(false)
+  const [syncing, setSyncing]     = useState(false)
+  const [syncResult, setSyncResult] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [showPass, setShowPass]   = useState(false)
+  const [testing, setTesting]     = useState(false)
+  const [testResult, setTestResult] = useState<{ msg: string; ok: boolean } | null>(null)
 
   useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(d => setForm(prev => ({ ...prev, ...d })))
+    fetch('/api/settings').then(r => r.json()).then(d => setForm(p => ({ ...p, ...d })))
   }, [])
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true)
-    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 3000)
   }
 
   const syncNow = async () => {
-    setSyncing(true); setSyncResult('')
+    setSyncing(true); setSyncResult(null)
     const res = await fetch('/api/email/sync', { method: 'POST' }).then(r => r.json())
-    setSyncResult(res.error ? `שגיאה: ${res.error}` : `נוספו ${res.added} הזמנות (${res.skipped} דולגו)`)
+    if (res.error) setSyncResult({ msg: res.error, ok: false })
+    else setSyncResult({ msg: `✓ נוספו ${res.added} הזמנות (${res.skipped} נסרקו)`, ok: true })
     setSyncing(false)
-    fetch('/api/settings').then(r => r.json()).then(d => setForm(prev => ({ ...prev, ...d })))
+    fetch('/api/settings').then(r => r.json()).then(d => setForm(p => ({ ...p, ...d })))
+  }
+
+  const testConnection = async () => {
+    setTesting(true); setTestResult(null)
+    const res = await fetch('/api/email/test', { method: 'POST' }).then(r => r.json())
+    if (res.success) setTestResult({ msg: '✓ החיבור הצליח! מייל אישור נשלח אליך', ok: true })
+    else setTestResult({ msg: res.error ?? 'שגיאה לא ידועה', ok: false })
+    setTesting(false)
   }
 
   return (
-    <div className="page-container" style={{ maxWidth: 720 }}>
-      {/* Header */}
+    <div className="page-container" style={{ maxWidth: 680 }}>
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <div style={{ width: 4, height: 28, background: 'linear-gradient(180deg, #6b7a99, #9baabe)', borderRadius: 99 }} />
           <h1 className="page-title">הגדרות</h1>
         </div>
-        <p className="page-subtitle" style={{ marginRight: 16 }}>הגדר חיבור לג׳ימייל ופרמטרי התראות</p>
+        <p className="page-subtitle" style={{ marginRight: 16 }}>חיבור Gmail והגדרות התראות</p>
       </div>
 
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* Alert Settings */}
-        <div className="card" style={{ padding: 28, borderTop: '3px solid #f59e0b' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 13, background: 'linear-gradient(135deg, #d97706, #f59e0b)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
-              <Bell size={20} color="white" />
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: '#0f1f3d' }}>הגדרות התראות</div>
-              <div style={{ fontSize: 12, color: '#9baabe' }}>מתי לשלוח התראות על הזמנות שלא טופלו</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20 }}>
-            <div style={{ flex: 1 }}>
-              <label className="label">ימים עד התראה</label>
-              <input className="input" type="number" min="1" max="30" value={form.alert_days} onChange={e => setForm(p => ({ ...p, alert_days: e.target.value }))} style={{ maxWidth: 140 }} />
-            </div>
-            <div style={{ flex: 2, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '14px 18px', fontSize: 13, color: '#92400e', lineHeight: 1.6 }}>
-              <b>⏰ כרגע:</b> כל הזמנה שלא סומנה כ"סופק" תוך <b>{form.alert_days} ימים</b> תופיע בעמוד ההתראות ותספור כהתראה פעילה.
-            </div>
-          </div>
-        </div>
-
-        {/* Gmail Settings */}
+        {/* Gmail Connection */}
         <div className="card" style={{ padding: 28, borderTop: '3px solid #2d6aff' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 13, background: 'linear-gradient(135deg, #1a52db, #2d6aff)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(45,106,255,0.3)' }}>
-              <Mail size={20} color="white" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: 'linear-gradient(135deg, #1a52db, #2d6aff)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(45,106,255,0.3)' }}>
+              <Mail size={22} color="white" />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: '#0f1f3d' }}>חיבור Gmail</div>
-              <div style={{ fontSize: 12, color: '#9baabe' }}>סנכרון הזמנות אוטומטי מהמייל</div>
+              <div style={{ fontWeight: 800, fontSize: 17, color: '#0f1f3d' }}>חיבור Gmail</div>
+              <div style={{ fontSize: 12, color: '#9baabe' }}>סריקה אוטומטית של הזמנות נכנסות</div>
             </div>
           </div>
 
-          {/* Instructions */}
-          <div style={{ background: '#f0f4ff', border: '1px solid #bfccff', borderRadius: 14, padding: 18, marginBottom: 22, marginTop: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Shield size={14} color="#2d6aff" />
-              <span style={{ fontWeight: 700, fontSize: 13, color: '#1a52db' }}>הגדרה חד-פעמית – שלבים:</span>
+          {/* Step-by-step guide */}
+          <div style={{ background: '#f0f4ff', border: '1px solid #bfccff', borderRadius: 14, padding: 20, marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <Shield size={15} color="#2d6aff" />
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#1a52db' }}>איך מחברים? — 3 דקות, פעם אחת</span>
             </div>
-            <ol style={{ fontSize: 13, color: '#3d4f6e', lineHeight: 1.8, paddingRight: 16, margin: 0 }}>
-              <li>כנס ל-<a href="https://console.cloud.google.com/" target="_blank" rel="noopener" style={{ color: '#2d6aff', fontWeight: 600 }}>Google Cloud Console <ExternalLink size={11} style={{ display: 'inline', verticalAlign: 'middle' }} /></a></li>
-              <li>צור פרויקט חדש, הפעל <b>Gmail API</b></li>
-              <li>צור <b>OAuth2 Credentials</b> (Desktop application)</li>
-              <li>הרץ את הסקריפט שמורשה פעם אחת כדי לקבל Refresh Token</li>
-              <li>הכנס את הפרטים כאן ולחץ שמור</li>
-            </ol>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                {
+                  n: '1',
+                  text: 'כנס לחשבון Google שלך',
+                  link: { label: 'myaccount.google.com ←', href: 'https://myaccount.google.com/security' },
+                },
+                {
+                  n: '2',
+                  text: 'חפש "אימות דו-שלבי" — ודא שהוא מופעל (רוב החשבונות כבר מופעל)',
+                  link: null,
+                },
+                {
+                  n: '3',
+                  text: 'חפש "סיסמאות לאפליקציות" → צור סיסמה חדשה → קרא לה "AirPak"',
+                  link: { label: 'קיצור דרך ←', href: 'https://myaccount.google.com/apppasswords' },
+                },
+                {
+                  n: '4',
+                  text: 'תקבל 16 תווים כמו: "abcd efgh ijkl mnop" — העתק אותם והכנס למטה',
+                  link: null,
+                },
+              ].map(step => (
+                <div key={step.n} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#2d6aff', color: 'white', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                    {step.n}
+                  </div>
+                  <div style={{ fontSize: 13, color: '#3d4f6e', lineHeight: 1.6 }}>
+                    {step.text}
+                    {step.link && (
+                      <> &nbsp;
+                        <a href={step.link.href} target="_blank" rel="noopener" style={{ color: '#2d6aff', fontWeight: 600, textDecoration: 'none' }}>
+                          {step.link.label} <ExternalLink size={11} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                        </a>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label className="label">כתובת Gmail לסריקה</label>
-              <input className="input" type="email" value={form.gmail_email} onChange={e => setForm(p => ({ ...p, gmail_email: e.target.value }))} placeholder="yourname@gmail.com" />
+          {/* Fields */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label className="label">כתובת Gmail</label>
+              <input
+                className="input"
+                type="email"
+                value={form.imap_email}
+                onChange={e => setForm(p => ({ ...p, imap_email: e.target.value }))}
+                placeholder="yourname@gmail.com"
+                dir="ltr"
+              />
             </div>
             <div>
-              <label className="label">Client ID</label>
-              <input className="input" value={form.gmail_client_id} onChange={e => setForm(p => ({ ...p, gmail_client_id: e.target.value }))} placeholder="xxxxxxxxxx.apps.googleusercontent.com" />
-            </div>
-            <div>
-              <label className="label">Client Secret</label>
-              <input className="input" type="password" value={form.gmail_client_secret} onChange={e => setForm(p => ({ ...p, gmail_client_secret: e.target.value }))} placeholder="GOCSPX-..." />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label className="label">Refresh Token</label>
-              <input className="input" type="password" value={form.gmail_refresh_token} onChange={e => setForm(p => ({ ...p, gmail_refresh_token: e.target.value }))} placeholder="1//04..." />
+              <label className="label">סיסמת אפליקציה (App Password)</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="input"
+                  type={showPass ? 'text' : 'password'}
+                  value={form.imap_password}
+                  onChange={e => setForm(p => ({ ...p, imap_password: e.target.value }))}
+                  placeholder="abcd efgh ijkl mnop"
+                  dir="ltr"
+                  style={{ paddingLeft: 44 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(v => !v)}
+                  style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9baabe' }}
+                >
+                  {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              <p style={{ fontSize: 11, color: '#9baabe', marginTop: 5 }}>
+                ניתן להוסיף עם רווחים או בלי — המערכת תתעלם מהם אוטומטית
+              </p>
             </div>
           </div>
 
@@ -120,16 +167,58 @@ export default function SettingsPage() {
             </p>
           )}
 
+          {/* Test connection button */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 18 }}>
-            <button type="button" onClick={syncNow} disabled={syncing} className="btn-secondary">
-              <RefreshCw size={15} style={syncing ? { animation: 'spin 0.8s linear infinite' } : {}} />
-              {syncing ? 'מסנכרן...' : 'סנכרן עכשיו'}
+            <button type="button" onClick={testConnection} disabled={testing} className="btn-primary" style={{ background: 'linear-gradient(135deg, #059669, #10b981)' }}>
+              <Wifi size={15} style={testing ? { animation: 'spin 0.8s linear infinite' } : {}} />
+              {testing ? 'בודק חיבור...' : 'בדוק חיבור'}
             </button>
-            {syncResult && (
-              <span style={{ fontSize: 13, fontWeight: 600, color: syncResult.startsWith('שגיאה') ? '#e11d48' : '#10b981' }}>
-                {syncResult}
+            {testResult && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: testResult.ok ? '#10b981' : '#e11d48' }}>
+                {testResult.msg}
               </span>
             )}
+          </div>
+
+          {/* Sync button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12 }}>
+            <button type="button" onClick={syncNow} disabled={syncing} className="btn-secondary">
+              <RefreshCw size={15} style={syncing ? { animation: 'spin 0.8s linear infinite' } : {}} />
+              {syncing ? 'סורק מיילים...' : 'סנכרן עכשיו'}
+            </button>
+            {syncResult && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: syncResult.ok ? '#10b981' : '#e11d48' }}>
+                {syncResult.msg}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Alert days */}
+        <div className="card" style={{ padding: 28, borderTop: '3px solid #f59e0b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: 'linear-gradient(135deg, #d97706, #f59e0b)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
+              <Bell size={22} color="white" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 17, color: '#0f1f3d' }}>הגדרות התראות</div>
+              <div style={{ fontSize: 12, color: '#9baabe' }}>מתי להתריע על הזמנה שלא טופלה</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div>
+              <label className="label">ימים עד התראה</label>
+              <input
+                className="input"
+                type="number" min="1" max="30"
+                value={form.alert_days}
+                onChange={e => setForm(p => ({ ...p, alert_days: e.target.value }))}
+                style={{ width: 100 }}
+              />
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#92400e', flex: 1 }}>
+              אם הזמנה לא סומנה "סופק" תוך <b>{form.alert_days} ימים</b> — תופיע התראה אוטומטית
+            </div>
           </div>
         </div>
 
@@ -139,8 +228,8 @@ export default function SettingsPage() {
             <Save size={16} /> {saving ? 'שומר...' : 'שמור הגדרות'}
           </button>
           {saved && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontWeight: 600, fontSize: 14 }}>
-              <CheckCircle size={16} /> נשמר בהצלחה!
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontWeight: 700, fontSize: 14 }}>
+              <CheckCircle size={17} /> נשמר!
             </div>
           )}
         </div>
