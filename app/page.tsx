@@ -41,7 +41,7 @@ export default function Dashboard() {
   const syncEmail = async () => {
     setSyncing(true); setSyncMsg('')
     const res = await fetch('/api/email/sync', { method: 'POST' }).then(r => r.json())
-    setSyncMsg(res.error ? `שגיאה: ${res.error}` : `סונקרנו ${res.added} הזמנות חדשות`)
+    setSyncMsg(res.error ? `שגיאה: ${res.error}` : `סונכרנו ${res.added} הזמנות חדשות`)
     setSyncing(false); loadAll()
   }
 
